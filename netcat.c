@@ -17,8 +17,8 @@ void Server(char *address, char *port, int *socktype, int *family)
 	char buf[BUF_SIZE];
 
 	memset(&hints, 0, sizeof(struct addrinfo));
-	hints.ai_family = *family; /*Allow IPv4 or IPv6 */
-	hints.ai_socktype = *socktype; /*Datagram socket */
+	hints.ai_family = *family; 
+	hints.ai_socktype = *socktype; 
 	hints.ai_flags = AI_PASSIVE; /*For wildcard IP address */
 	hints.ai_protocol = 0; /*Any protocol */
 	hints.ai_canonname = NULL;
@@ -31,6 +31,11 @@ void Server(char *address, char *port, int *socktype, int *family)
 		fprintf(stderr, "getaddrinfo: %s\n", gai_strerror(s));
 		exit(EXIT_FAILURE);
 	}
+
+	/* getaddrinfo() returns a list of address structures.
+              Try each address until we successfully bind(2).
+              If socket(2) (or bind(2)) fails, we (close the socket
+              and) try the next address. */
 
 	for (rp = result; rp != NULL; rp = rp->ai_next)
 	{
@@ -113,7 +118,7 @@ void Server(char *address, char *port, int *socktype, int *family)
 void Client(char *address, char *port, int *socktype, int *family)
 {
 	struct addrinfo hints, *result, *rp;
-	int cfd, s;
+	int cfd, s, pid;
 	ssize_t nread;
 	char buf[BUF_SIZE];
 
@@ -162,14 +167,19 @@ void Client(char *address, char *port, int *socktype, int *family)
 
 	freeaddrinfo(result); /*No longer needed */
 
-	if ((nread = read(STDIN_FILENO, buf, BUF_SIZE)) > 0)
-    {
-        if (write(cfd, buf, nread) == -1)
-        {
-            fprintf(stderr, "write()\n");
-			exit(EXIT_FAILURE);
-        }
-
+	if ((pid = fork()) == 0) 
+	{
+		while ((nread = read(STDIN_FILENO, buf, BUF_SIZE)) > 0)
+		{
+			if (write(cfd, buf, nread) == -1)
+			{
+				fprintf(stderr, "write()\n");
+				exit(EXIT_FAILURE);
+			}
+		}
+	}
+	else 
+	{
 		while ((nread = read(cfd, buf, BUF_SIZE)) > 0)
 		{
 			
@@ -185,10 +195,7 @@ void Client(char *address, char *port, int *socktype, int *family)
 			fprintf(stderr, "read()\n");
 			exit(EXIT_FAILURE);
 		} 
-    }
-
-	/*Send remaining command-line arguments as separate
-	   datagrams, and read responses from server */
+	}
 
 	close(cfd);
 } 
@@ -197,8 +204,7 @@ int main(int argc, char *argv[])
 {
 	int socktype = SOCK_STREAM;
 	int family = AF_UNSPEC; /*Allow IPv4 or IPv6 */
-	int listen = 0;
-	int c;
+	int l = 0, c;
 	char *hostname = NULL;
 	char *port;
 
@@ -207,7 +213,7 @@ int main(int argc, char *argv[])
 		switch (c)
 		{
 			case 'l':
-				listen = 1;
+				l = 1;
 				break;
 			case 'u':
 				socktype = SOCK_DGRAM;
@@ -221,17 +227,7 @@ int main(int argc, char *argv[])
 		}
 	}
 
-	if (listen == 0)
-	{
-		if (optind + 2 != argc)
-		{
-			printf("Usage: %s[-l listen on port][-u UDP][-4 IPv4][-6 IPv6] host port\n", argv[0]);
-			exit(0);
-		}
-		
-		Client(argv[optind], argv[optind + 1], &socktype, &family);
-	}
-	else
+	if (l)
 	{
 		if (optind + 1 == argc)
 		{
@@ -249,6 +245,16 @@ int main(int argc, char *argv[])
 		}
 
 		Server(hostname, port, &socktype, &family);
+	}
+	else
+	{
+		if (optind + 2 != argc)
+		{
+			printf("Usage: %s[-l listen on port][-u UDP][-4 IPv4][-6 IPv6] host port\n", argv[0]);
+			exit(0);
+		}
+		
+		Client(argv[optind], argv[optind + 1], &socktype, &family);
 	}
 
 	return 0;
