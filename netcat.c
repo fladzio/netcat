@@ -42,6 +42,17 @@ void Server(char *address, char *port, int *socktype, int *family)
 		sfd = socket(rp->ai_family, rp->ai_socktype, rp->ai_protocol);
 		if (sfd == -1)
 			continue;
+        
+        if (*socktype == SOCK_STREAM)
+        {
+            int sockopt = setsockopt(sfd, SOL_SOCKET, SO_REUSEADDR, &(int){1}, sizeof(int));
+
+            if (sockopt == -1)
+            {
+                perror("server: setsockopt()");
+                exit(EXIT_FAILURE);
+            }
+        }
 
 		if (bind(sfd, rp->ai_addr, rp->ai_addrlen) == 0)
 			break; /*Success */
@@ -51,13 +62,13 @@ void Server(char *address, char *port, int *socktype, int *family)
 
 	if (rp == NULL) /*No address succeeded */
 	{
-		fprintf(stderr, "Could not bind\n");
+		perror("server: Could not bind");
 		exit(EXIT_FAILURE);
 	}
 
 	if (*socktype == SOCK_STREAM && listen(sfd, 1) == -1)
 	{
-		fprintf(stderr, "listen()\n");
+		perror("server: listen()");
 		exit(EXIT_FAILURE);
 	}
 
@@ -69,7 +80,7 @@ void Server(char *address, char *port, int *socktype, int *family)
 	{
 		if((cfd = accept(sfd, (struct sockaddr *) &peer_addr, &peer_addr_len)) == -1)
 		{
-			fprintf(stderr, "accept()\n");
+			perror("server: accept()");
 			exit(EXIT_FAILURE);
 		}
 	}
@@ -79,19 +90,19 @@ void Server(char *address, char *port, int *socktype, int *family)
 
 		if ((nread = recvfrom(sfd, buf, BUF_SIZE - 1, 0, (struct sockaddr *) &peer_addr, &peer_addr_len)) == -1)
 		{
-			fprintf(stderr, "recvfrom()\n");
+			perror("server: recvfrom()");
 			exit(EXIT_FAILURE);
 		}
 
 		if (write(STDOUT_FILENO, buf, nread) == -1)
 		{
-			fprintf(stderr, "write()\n");
+			perror("server: write()");
 			exit(EXIT_FAILURE);
 		}
 
 		if (connect(sfd, (struct sockaddr *) &peer_addr, peer_addr_len) == -1)
 		{
-			fprintf(stderr, "connect()\n");
+			perror("sercer: connect()");
 			exit(EXIT_FAILURE);
 		}
 	}
@@ -100,14 +111,14 @@ void Server(char *address, char *port, int *socktype, int *family)
 	{
 		if (write(STDOUT_FILENO, buf, nread) == -1)
 		{
-			fprintf(stderr, "write()\n");
+			perror("server: write()");
 			exit(EXIT_FAILURE);
 		}
 	}
 
 	if (nread == -1)
 	{
-		fprintf(stderr, "read()\n");
+		perror("server: read()");
 		exit(EXIT_FAILURE);;
 	}
 
@@ -127,8 +138,8 @@ void Client(char *address, char *port, int *socktype, int *family)
 	memset(&hints, 0, sizeof(hints));
 	hints.ai_family = *family; /*Allow IPv4 or IPv6 */
 	hints.ai_socktype = *socktype; /*Datagram socket */
-	//hints.ai_flags = 0;
-	//hints.ai_protocol = 0; /*Any protocol */
+	hints.ai_flags = 0;
+	hints.ai_protocol = 0; /*Any protocol */
 
 	s = getaddrinfo(address, port, &hints, &result);
 	if (s != 0)
@@ -151,7 +162,7 @@ void Client(char *address, char *port, int *socktype, int *family)
 		if (connect(cfd, rp->ai_addr, rp->ai_addrlen) == -1)
 		{
 			close(cfd);
-            perror("client: connect");
+            perror("client: connect()");
             continue;
 		}
 
@@ -161,7 +172,7 @@ void Client(char *address, char *port, int *socktype, int *family)
 	if (rp == NULL)
 	{
 		/*No address succeeded */
-		fprintf(stderr, "Could not connect\n");
+		perror("client: Could not connect");
 		exit(EXIT_FAILURE);
 	}
 
@@ -173,7 +184,7 @@ void Client(char *address, char *port, int *socktype, int *family)
 		{
 			if (write(cfd, buf, nread) == -1)
 			{
-				fprintf(stderr, "write()\n");
+				perror("client: write()");
 				exit(EXIT_FAILURE);
 			}
 		}
@@ -185,14 +196,15 @@ void Client(char *address, char *port, int *socktype, int *family)
 			
 			if (write(STDOUT_FILENO, buf, nread) == -1)
 			{
-				fprintf(stderr, "send()\n");
+                perror("client: send()");
 				exit(EXIT_FAILURE);
 			}
 		}
 
 		if (nread == -1)
 		{
-			fprintf(stderr, "read()\n");
+			//fprintf(stderr, "read()\n");
+            perror("client: read()");
 			exit(EXIT_FAILURE);
 		} 
 	}
